@@ -1,0 +1,45 @@
+groups:
+- name: slo
+  rules:
+  - record: sli:availability:5m
+    expr: avg_over_time(probe_success{job="probe-fileforge"}[5m])
+  - record: sli:error_ratio:5m
+    expr: 1 - sli:availability:5m
+  - record: sli:latency_p95:5m
+    expr: quantile_over_time(0.95, probe_duration_seconds{job="probe-fileforge"}[5m])
+  - record: slo:budget_remaining:1h
+    expr: 1 - ((1 - avg_over_time(probe_success{job="probe-fileforge"}[1h])) / 0.008)
+  - alert: AvailabilityFastBurn
+    expr: sli:error_ratio:5m > 14.4 * 0.008
+    for: 1m
+    labels: {severity: page}
+  - alert: AvailabilitySlowBurn
+    expr: (1 - avg_over_time(probe_success{job="probe-fileforge"}[30m])) > 6 * 0.008
+    for: 5m
+    labels: {severity: ticket}
+  - alert: LatencySLOBreach
+    expr: sli:latency_p95:5m > 0.5
+    for: 5m
+    labels: {severity: ticket}
+- name: detection
+  rules:
+  - alert: FileForgeDown
+    expr: probe_success{job="probe-fileforge"} == 0
+    for: 1m
+    labels: {severity: page}
+    annotations: {summary: "FileForge down hai"}
+  - alert: MonitoringTargetDown
+    expr: up{job=~"app-node|app-cadvisor"} == 0
+    for: 2m
+    labels: {severity: ticket}
+    annotations: {summary: "Exporter ka data nahi aa raha"}
+  - alert: HighCPU
+    expr: 100 - (avg(rate(node_cpu_seconds_total{job="app-node",mode="idle"}[5m])) * 100) > 85
+    for: 10m
+    labels: {severity: ticket}
+    annotations: {summary: "CPU 85% se upar"}
+  - alert: DiskAlmostFull
+    expr: (1 - node_filesystem_avail_bytes{job="app-node",mountpoint="/"} / node_filesystem_size_bytes{job="app-node",mountpoint="/"}) * 100 > 85
+    for: 5m
+    labels: {severity: ticket}
+    annotations: {summary: "Disk 85% se upar"}
